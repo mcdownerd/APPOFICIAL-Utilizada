@@ -1,0 +1,6 @@
+(
+  (SELECT user_role FROM public.profiles WHERE id = auth.uid()) = 'admin'
+) OR (
+  (SELECT user_role FROM public.profiles WHERE id = auth.uid()) = 'restaurante' AND
+  restaurant_id = (SELECT restaurant_id FROM public.profiles WHERE id = auth.uid())
+)

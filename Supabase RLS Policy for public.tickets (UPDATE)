@@ -1,0 +1,59 @@
+-- Policy Name: restaurante_update_tickets
+-- Table: public.tickets
+-- Policy Command: UPDATE
+-- Target Roles: authenticated
+
+-- USING expression: Define quais linhas podem ser atualizadas.
+-- Permite que 'restaurante' atualize tickets ATIVOS do seu restaurante.
+-- Permite que 'admin' atualize QUALQUER ticket.
+using (
+    (
+        EXISTS (
+            SELECT 1
+            FROM profiles
+            WHERE
+                (profiles.id = auth.uid())
+                AND (profiles.user_role = 'restaurante'::text)
+                AND (profiles.restaurant_id = tickets.restaurant_id)
+        )
+        AND (tickets.soft_deleted = FALSE) -- Restaurantes só podem atualizar tickets que não foram soft-deleted
+    )
+    OR
+    (
+        EXISTS (
+            SELECT 1
+            FROM profiles
+            WHERE
+                (profiles.id = auth.uid())
+                AND (profiles.user_role = 'admin'::text)
+        )
+    )
+)
+
+-- WITH CHECK expression: Define as condições que a linha DEVE satisfazer APÓS a atualização.
+-- Garante que 'restaurante' só atualize tickets que continuem no seu restaurante.
+-- Impede que 'restaurante' mude 'soft_deleted' de TRUE para FALSE (restaurar).
+-- 'admin' não tem restrições aqui.
+with check (
+    (
+        EXISTS (
+            SELECT 1
+            FROM profiles
+            WHERE
+                (profiles.id = auth.uid())
+                AND (profiles.user_role = 'restaurante'::text)
+                AND (profiles.restaurant_id = NEW.restaurant_id) -- O restaurant_id do ticket DEVE continuar a ser o do restaurante do utilizador
+        )
+        AND (NEW.soft_deleted = OLD.soft_deleted OR NEW.soft_deleted = TRUE) -- Permite soft_deleted mudar de FALSE para TRUE, mas não o contrário
+    )
+    OR
+    (
+        EXISTS (
+            SELECT 1
+            FROM profiles
+            WHERE
+                (profiles.id = auth.uid())
+                AND (profiles.user_role = 'admin'::text)
+        )
+    )
+)

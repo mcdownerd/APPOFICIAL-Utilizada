@@ -1,0 +1,13 @@
+(
+  (SELECT user_role FROM public.profiles WHERE id = auth.uid()) = 'admin'
+) OR (
+  (SELECT user_role FROM public.profiles WHERE id = auth.uid()) = 'restaurante' AND
+  (
+    -- Ensure restaurant_id is not changed by a restaurant user
+    new.restaurant_id = old.restaurant_id AND
+    -- Allow soft_deleted to be set to TRUE
+    (new.soft_deleted = old.soft_deleted OR new.soft_deleted = TRUE) AND
+    -- Allow status to be changed to ACKED
+    (new.status = old.status OR new.status = 'ACKED')
+  )
+)

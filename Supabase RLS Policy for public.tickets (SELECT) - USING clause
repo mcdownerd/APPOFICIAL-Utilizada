@@ -1,0 +1,14 @@
+(
+    (SELECT user_role FROM profiles WHERE id = auth.uid()) = 'admin'::text
+)
+OR
+(
+    (SELECT user_role FROM profiles WHERE id = auth.uid()) = 'restaurante'::text
+    AND EXISTS (
+        SELECT 1
+        FROM profiles
+        WHERE
+            (profiles.id = auth.uid())
+            AND (profiles.restaurant_id = tickets.restaurant_id)
+    )
+)
