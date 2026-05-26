@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { TicketAPI, Ticket } from "@/lib/api";
 import { showSuccess, showError } from "@/utils/toast";
@@ -101,30 +101,43 @@ const EstafetaPage = () => {
     }
   }, [t, user?.restaurant_id]);
 
+  // Ref para sempre ter a versão mais recente de fetchRecentTickets sem recriar o canal
+  const fetchRecentTicketsRef = useRef(fetchRecentTickets);
+  useEffect(() => {
+    fetchRecentTicketsRef.current = fetchRecentTickets;
+  }, [fetchRecentTickets]);
+
+  // Carregar tickets quando as dependências mudam
   useEffect(() => {
     fetchRecentTickets();
+  }, [fetchRecentTickets]);
 
+  // Subscrição Realtime — criada apenas uma vez
+  useEffect(() => {
+    if (!user?.id) return;
     const channel = supabase
-      .channel('estafeta-changes')
+      .channel('estafeta-tickets-changes')
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'tickets',
-          filter: `created_by=eq.${user?.id}`
+          filter: `created_by=eq.${user.id}`
         },
-        () => {
-          console.log('Realtime update for estafeta tickets');
-          fetchRecentTickets();
+        (payload) => {
+          console.log('[Estafeta Realtime] Change received:', payload);
+          fetchRecentTicketsRef.current();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[Estafeta Realtime] Status:', status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchRecentTickets, user?.id]);
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchPendingTicketsCount();

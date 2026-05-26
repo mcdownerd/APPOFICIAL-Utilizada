@@ -107,12 +107,21 @@ export default function EcranEstafetaPage() {
     }
   }, [user, isAdmin, t, selectedRestaurant]);
 
+  // Ref para sempre ter acesso à versão mais recente de loadTickets
+  const loadTicketsRef = useRef(loadTickets);
+  useEffect(() => {
+    loadTicketsRef.current = loadTickets;
+  }, [loadTickets]);
+
+  // Carregar tickets quando as dependências mudam
   useEffect(() => {
     loadTickets();
+  }, [loadTickets]);
 
-    // Configurar subscrição em tempo real
+  // Subscrição Realtime — criada apenas uma vez
+  useEffect(() => {
     const channel = supabase
-      .channel('ecran-estafeta-changes')
+      .channel('ecran-estafeta-tickets-changes')
       .on(
         'postgres_changes',
         {
@@ -120,12 +129,14 @@ export default function EcranEstafetaPage() {
           schema: 'public',
           table: 'tickets'
         },
-        () => {
-          console.log('Change received in EcranEstafeta, reloading tickets...');
-          loadTickets();
+        (payload) => {
+          console.log('[EcranEstafeta Realtime] Change received:', payload);
+          loadTicketsRef.current();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[EcranEstafeta Realtime] Status:', status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -134,7 +145,7 @@ export default function EcranEstafetaPage() {
         doubleClickTimeoutRef.current = null;
       }
     };
-  }, [loadTickets]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSoftDelete = async (ticket: Ticket) => {
     if (!user) {

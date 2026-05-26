@@ -78,12 +78,21 @@ export default function BalcaoPage() {
     }
   }, [user, isAdmin, t, selectedRestaurant]);
 
+  // Ref para sempre ter acesso à versão mais recente de loadTickets sem recriar o canal
+  const loadTicketsRef = useRef(loadTickets);
+  useEffect(() => {
+    loadTicketsRef.current = loadTickets;
+  }, [loadTickets]);
+
+  // Carregar tickets iniciais quando o utilizador ou o restaurante selecionado mudar
   useEffect(() => {
     loadTickets();
+  }, [loadTickets]);
 
-    // Configurar subscrição em tempo real
+  // Subscrição Realtime — criada apenas uma vez, nunca recriada
+  useEffect(() => {
     const channel = supabase
-      .channel('schema-db-changes')
+      .channel('balcao-tickets-changes')
       .on(
         'postgres_changes',
         {
@@ -91,12 +100,14 @@ export default function BalcaoPage() {
           schema: 'public',
           table: 'tickets'
         },
-        () => {
-          console.log('Change received, reloading tickets...');
-          loadTickets();
+        (payload) => {
+          console.log('[Balcao Realtime] Change received:', payload);
+          loadTicketsRef.current();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[Balcao Realtime] Status:', status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -105,7 +116,7 @@ export default function BalcaoPage() {
         doubleClickTimeoutRef.current = null;
       }
     };
-  }, [loadTickets]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTicketClick = async (ticket: Ticket) => {
     if (!user) {
