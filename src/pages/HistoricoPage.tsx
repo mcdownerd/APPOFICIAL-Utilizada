@@ -16,7 +16,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { HistoryIcon, RefreshCwIcon, Undo2Icon, CheckCircleIcon, ClockIcon, CalendarIcon, ArrowUpDown } from "lucide-react";
+import { HistoryIcon, RefreshCwIcon, Undo2Icon, CheckCircleIcon, ClockIcon, CalendarIcon, ArrowUpDown, SearchIcon } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { format, parseISO, differenceInMinutes } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useTranslation } from "react-i18next";
@@ -78,6 +79,7 @@ const HistoricoPage = () => {
   const [selectedRestaurant, setSelectedRestaurant] = useState("all");
   const [availableRestaurants, setAvailableRestaurants] = useState<Restaurant[]>([]);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'deleted_at', direction: 'desc' });
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     const fetchRestaurants = async () => {
@@ -237,6 +239,17 @@ const HistoricoPage = () => {
         </div>
       </div>
 
+      {/* Barra de Pesquisa */}
+      <div className="relative">
+        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <Input
+          placeholder={t("searchByCodeEmailOrRestaurant") || "Pesquisar por código, email ou restaurante..."}
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-2xl font-bold">{t("removedTickets")}</CardTitle>
@@ -293,52 +306,62 @@ const HistoricoPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {deletedTickets.map((ticket) => {
-                    const showDeletionDate = ticket.deleted_at;
-                    const dateToShow = showDeletionDate ? ticket.deleted_at : ticket.created_date;
-                    const isFallbackDate = !showDeletionDate;
-                    const formattedDate = formatDateWithWeekday(dateToShow, i18n.language === 'pt' ? ptBR : undefined);
-                    
-                    return (
-                      <TableRow key={ticket.id}>
-                        <TableCell className="font-medium">{ticket.code}</TableCell>
-                        <TableCell>
-                          {ticket.status === "PENDING" ? (
-                            <Badge variant="outline" className="bg-yellow-100 text-yellow-800">
-                              <ClockIcon className="mr-1 h-3 w-3" /> {t("pending")}
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="bg-green-100 text-green-800">
-                              <CheckCircleIcon className="mr-1 h-3 w-3" /> {t("ready")}
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>{getRestaurantNameForTicket(ticket.restaurant_id)}</TableCell>
-                        <TableCell>{ticket.created_by_user_email}</TableCell>
-                        <TableCell className="flex items-center gap-2">
-                          <CalendarIcon className="h-4 w-4 text-gray-500" />
-                          <span>{formattedDate}</span>
-                          {isFallbackDate && (
-                            <Badge variant="secondary" className="text-xs">
-                              {t("created")}
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>{getPendingDuration(ticket, t).display}</TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleRestoreTicket(ticket.id)}
-                            disabled={actionLoading === ticket.id}
-                          >
-                            <Undo2Icon className="mr-2 h-4 w-4" />
-                            {actionLoading === ticket.id ? t("restoring") : t("restore")}
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {deletedTickets
+                    .filter(ticket => {
+                      if (!searchQuery.trim()) return true;
+                      const q = searchQuery.toLowerCase();
+                      return (
+                        ticket.code?.toLowerCase().includes(q) ||
+                        ticket.created_by_user_email?.toLowerCase().includes(q) ||
+                        ticket.restaurantNameDisplay?.toLowerCase().includes(q)
+                      );
+                    })
+                    .map((ticket) => {
+                      const showDeletionDate = ticket.deleted_at;
+                      const dateToShow = showDeletionDate ? ticket.deleted_at : ticket.created_date;
+                      const isFallbackDate = !showDeletionDate;
+                      const formattedDate = formatDateWithWeekday(dateToShow, i18n.language === 'pt' ? ptBR : undefined);
+
+                      return (
+                        <TableRow key={ticket.id}>
+                          <TableCell className="font-medium">{ticket.code}</TableCell>
+                          <TableCell>
+                            {ticket.status === "PENDING" ? (
+                              <Badge variant="outline" className="bg-yellow-100 text-yellow-800">
+                                <ClockIcon className="mr-1 h-3 w-3" /> {t("pending")}
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="bg-green-100 text-green-800">
+                                <CheckCircleIcon className="mr-1 h-3 w-3" /> {t("ready")}
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>{getRestaurantNameForTicket(ticket.restaurant_id)}</TableCell>
+                          <TableCell>{ticket.created_by_user_email}</TableCell>
+                          <TableCell className="flex items-center gap-2">
+                            <CalendarIcon className="h-4 w-4 text-gray-500" />
+                            <span>{formattedDate}</span>
+                            {isFallbackDate && (
+                              <Badge variant="secondary" className="text-xs">
+                                {t("created")}
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>{getPendingDuration(ticket, t).display}</TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRestoreTicket(ticket.id)}
+                              disabled={actionLoading === ticket.id}
+                            >
+                              <Undo2Icon className="mr-2 h-4 w-4" />
+                              {actionLoading === ticket.id ? t("restoring") : t("restore")}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                 </TableBody>
               </Table>
             </div>
