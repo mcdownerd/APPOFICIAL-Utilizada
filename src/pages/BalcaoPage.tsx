@@ -128,26 +128,7 @@ export default function BalcaoPage() {
     if (ticket.status === 'PENDING') {
       await handleAcknowledge(ticket);
     } else if (ticket.status === 'CONFIRMADO') {
-      if (pendingDelete === ticket.id) {
-        if (doubleClickTimeoutRef.current) {
-          clearTimeout(doubleClickTimeoutRef.current);
-          doubleClickTimeoutRef.current = null;
-        }
-        await handleSoftDelete(ticket);
-        setPendingDelete(null);
-      } else {
-        if (doubleClickTimeoutRef.current) {
-          clearTimeout(doubleClickTimeoutRef.current);
-          doubleClickTimeoutRef.current = null;
-        }
-        setPendingDelete(ticket.id);
-        showInfo(t('clickAgainToRemove'));
-
-        doubleClickTimeoutRef.current = setTimeout(() => {
-          setPendingDelete(null);
-          doubleClickTimeoutRef.current = null;
-        }, DOUBLE_CLICK_THRESHOLD);
-      }
+      await handleSoftDelete(ticket);
     }
   };
 
