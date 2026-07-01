@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { RefreshCwIcon, TrendingUpIcon, ClockIcon, AlertCircleIcon, BarChart3Icon, DownloadIcon, CheckCircleIcon } from "lucide-react";
-import { format, parseISO, differenceInMinutes, subDays, addDays, startOfDay, endOfDay, startOfWeek, startOfMonth, endOfMonth } from "date-fns"; // Added startOfWeek, startOfMonth, endOfMonth
+import { format, parseISO, differenceInSeconds, subDays, startOfDay, endOfDay, startOfWeek, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
@@ -24,7 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 // Interface para dados agregados
 interface AnalysisData {
   totalOrders: number;
-  avgPendingTime: number; // Em minutos
+  avgPendingSeconds: number; // Em segundos
   peakHour: string;
   peakCount: number;
   confirmationRate: number; // Em %
@@ -78,7 +78,7 @@ const calculateKPIs = (tickets: Ticket[], t: any): AnalysisData => {
   if (tickets.length === 0) {
     return {
       totalOrders: 0,
-      avgPendingTime: 0,
+      avgPendingSeconds: 0,
       peakHour: "00h",
       peakCount: 0,
       confirmationRate: 0,
@@ -87,7 +87,7 @@ const calculateKPIs = (tickets: Ticket[], t: any): AnalysisData => {
   }
 
   const hourlyCounts: Record<string, number> = {};
-  let totalPendingMinutes = 0;
+  let totalPendingSeconds = 0;
   let confirmedCount = 0;
   let pendingCount = 0;
 
@@ -118,12 +118,12 @@ const calculateKPIs = (tickets: Ticket[], t: any): AnalysisData => {
     }
 
     if (endDate) {
-      const minutes = differenceInMinutes(endDate, createdDate);
-      totalPendingMinutes += Math.max(0, minutes); // Ignora negativos
+      const secs = differenceInSeconds(endDate, createdDate);
+      totalPendingSeconds += Math.max(0, secs);
     }
   });
 
-  const avgPendingTime = tickets.length > 0 ? totalPendingMinutes / tickets.length : 0;
+  const avgPendingSeconds = tickets.length > 0 ? totalPendingSeconds / tickets.length : 0;
   const confirmationRate = tickets.length > 0 ? (confirmedCount / tickets.length) * 100 : 0;
 
   // Encontrar horário pico
@@ -143,12 +143,22 @@ const calculateKPIs = (tickets: Ticket[], t: any): AnalysisData => {
 
   return {
     totalOrders: tickets.length,
-    avgPendingTime: Math.round(avgPendingTime),
+    avgPendingSeconds: Math.round(avgPendingSeconds),
     peakHour: `${peakHour}h`,
     peakCount,
     confirmationRate: Math.round(confirmationRate),
     hourlyData,
   };
+};
+
+const formatDuration = (seconds: number): string => {
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (mins < 60) return secs > 0 ? `${mins}min ${secs}s` : `${mins}min`;
+  const hours = Math.floor(mins / 60);
+  const remainMins = mins % 60;
+  return remainMins > 0 ? `${hours}h ${remainMins}min` : `${hours}h`;
 };
 
 // Componente KPI Card
@@ -171,6 +181,7 @@ const AnaliseTempoPage = () => {
   const [dateRange, setDateRange] = useState<DateRange>({ from: subDays(new Date(), 7), to: new Date() });
   const [selectedPeriod, setSelectedPeriod] = useState("week"); // today, week, month, custom
   const [selectedRestaurant, setSelectedRestaurant] = useState("all"); // all ou restaurant_id
+  const [hourRange, setHourRange] = useState<{ from: number; to: number }>({ from: 0, to: 23 });
   const [availableRestaurants, setAvailableRestaurants] = useState<Restaurant[]>([]); // Alterado para Restaurant[]
   const [error, setError] = useState<string | null>(null);
 
@@ -220,7 +231,7 @@ const AnaliseTempoPage = () => {
 
   // Query para dados com filtros
   const { data: analysisData, isLoading, error: queryError, refetch } = useQuery<AnalysisData, Error>({
-    queryKey: ["analysis", dateRange, selectedRestaurant, user?.restaurant_id, isAdmin], // Add user?.restaurant_id and isAdmin to queryKey
+    queryKey: ["analysis", dateRange, selectedRestaurant, user?.restaurant_id, isAdmin, hourRange],
     queryFn: async () => {
       let allTickets: Ticket[] = [];
       if (isAdmin) {
@@ -240,6 +251,8 @@ const AnaliseTempoPage = () => {
         let passesDateFilter = true;
         if (startDate && created < startDate) passesDateFilter = false;
         if (endDate && created > endDate) passesDateFilter = false;
+        const hour = created.getHours();
+        if (hour < hourRange.from || hour > hourRange.to) passesDateFilter = false;
         return passesDateFilter;
       });
 
@@ -264,11 +277,6 @@ const AnaliseTempoPage = () => {
 
   const handleDateRangeChange = (range: DateRange | undefined) => {
     setDateRange(range || { from: undefined, to: undefined });
-    setSelectedPeriod("custom"); // Set to custom when date range is manually changed
-  };
-
-  const handleApplyFilters = () => {
-    refetch();
   };
 
   const handleExport = () => {
@@ -314,7 +322,7 @@ const AnaliseTempoPage = () => {
         <p className="text-sm text-muted-foreground text-center max-w-md">
           {t("noDataDescription", { period: t(selectedPeriod) })}
         </p>
-        <Button onClick={handleApplyFilters} variant="outline">
+        <Button onClick={() => refetch()} variant="outline">
           {t("adjustFilters")}
         </Button>
       </motion.div>
@@ -353,44 +361,80 @@ const AnaliseTempoPage = () => {
       </div>
 
       {/* Filter Bar */}
-      <Card className="p-4">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
+      <Card className="p-4 space-y-4">
+        {/* Linha 1: Período */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-muted-foreground mr-1">{t("selectPeriod")}:</span>
+          {(["today", "week", "month", "custom"] as const).map((period) => (
+            <Button
+              key={period}
+              size="sm"
+              variant={selectedPeriod === period ? "default" : "outline"}
+              onClick={() => setSelectedPeriod(period)}
+            >
+              {t(period)}
+            </Button>
+          ))}
+          {selectedPeriod === "custom" && (
             <DateRangePicker dateRange={dateRange} onChange={handleDateRangeChange} />
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-              <SelectTrigger className="w-full sm:w-[180px]"> {/* Ajustado largura */}
-                <SelectValue placeholder={t("selectPeriod")} />
+          )}
+        </div>
+
+        {/* Linha 2: Hora, Restaurante e Ações */}
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm font-medium text-muted-foreground">{t("fromHour")}:</span>
+          <Select
+            value={String(hourRange.from)}
+            onValueChange={(v) => setHourRange((prev) => ({ ...prev, from: Number(v) }))}
+          >
+            <SelectTrigger className="w-[90px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Array.from({ length: 24 }, (_, i) => (
+                <SelectItem key={i} value={String(i)} disabled={i > hourRange.to}>
+                  {`${i.toString().padStart(2, "0")}h`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="text-sm text-muted-foreground">{t("toHour")}</span>
+          <Select
+            value={String(hourRange.to)}
+            onValueChange={(v) => setHourRange((prev) => ({ ...prev, to: Number(v) }))}
+          >
+            <SelectTrigger className="w-[90px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Array.from({ length: 24 }, (_, i) => (
+                <SelectItem key={i} value={String(i)} disabled={i < hourRange.from}>
+                  {`${i.toString().padStart(2, "0")}h`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {isAdmin && (
+            <Select value={selectedRestaurant} onValueChange={setSelectedRestaurant}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder={t("selectRestaurant")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="today">{t("today")}</SelectItem>
-                <SelectItem value="week">{t("week")}</SelectItem>
-                <SelectItem value="month">{t("month")}</SelectItem>
-                <SelectItem value="custom">{t("custom")}</SelectItem>
+                <SelectItem value="all">{t("all")}</SelectItem>
+                {availableRestaurants.map(r => (
+                  <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
-            {isAdmin && (
-              <Select value={selectedRestaurant} onValueChange={setSelectedRestaurant}>
-                <SelectTrigger className="w-full sm:w-[200px]"> {/* Ajustado largura */}
-                  <SelectValue placeholder={t("selectRestaurant")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("all")}</SelectItem>
-                  {availableRestaurants.map(r => (
-                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-2 mt-4 sm:mt-0"> {/* Adicionado flex-wrap e margem para mobile */}
-            <Button onClick={handleApplyFilters} variant="default">
-              {t("applyFilters")}
-            </Button>
-            <Button onClick={() => refetch()} variant="outline" disabled={isLoading}>
+          )}
+
+          <div className="ml-auto flex items-center gap-2">
+            <Button onClick={() => refetch()} variant="outline" size="sm" disabled={isLoading}>
               <RefreshCwIcon className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
               {t("refresh")}
             </Button>
-            <Button onClick={handleExport} variant="outline">
+            <Button onClick={handleExport} variant="outline" size="sm">
               <DownloadIcon className="h-4 w-4 mr-2" />
               {t("export")}
             </Button>
@@ -416,10 +460,10 @@ const AnaliseTempoPage = () => {
           />
           <KPIcard
             title={t("avgPendingTime")}
-            value={`${analysisData.avgPendingTime}min`}
-            subtitle={analysisData.avgPendingTime > 10 ? t("highPendingAlert") : t("goodPending")}
+            value={formatDuration(analysisData.avgPendingSeconds)}
+            subtitle={analysisData.avgPendingSeconds > 600 ? t("highPendingAlert") : t("goodPending")}
             icon={ClockIcon}
-            color={analysisData.avgPendingTime > 10 ? "red" : "green"}
+            color={analysisData.avgPendingSeconds > 600 ? "red" : "green"}
           />
           <KPIcard
             title={t("peakHour")}
