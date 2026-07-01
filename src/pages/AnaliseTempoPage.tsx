@@ -309,25 +309,7 @@ const AnaliseTempoPage = () => {
     return null;
   };
 
-  // Empty State
-  if (!isLoading && analysisData && analysisData.totalOrders === 0) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col items-center justify-center min-h-[60vh] space-y-4"
-      >
-        <BarChart3Icon className="h-12 w-12 text-muted-foreground" />
-        <h3 className="text-lg font-medium">{t("noDataAvailable")}</h3>
-        <p className="text-sm text-muted-foreground text-center max-w-md">
-          {t("noDataDescription", { period: t(selectedPeriod) })}
-        </p>
-        <Button onClick={() => refetch()} variant="outline">
-          {t("adjustFilters")}
-        </Button>
-      </motion.div>
-    );
-  }
+  const isEmpty = !isLoading && analysisData && analysisData.totalOrders === 0;
 
   // Error State
   if (error) {
@@ -442,14 +424,25 @@ const AnaliseTempoPage = () => {
         </div>
       </Card>
 
+      {/* Empty State */}
+      {isEmpty && (
+        <div className="flex flex-col items-center justify-center py-20 space-y-4">
+          <BarChart3Icon className="h-12 w-12 text-muted-foreground" />
+          <h3 className="text-lg font-medium">{t("noDataAvailable")}</h3>
+          <p className="text-sm text-muted-foreground text-center max-w-md">
+            {t("noDataDescription", { period: t(selectedPeriod) })}
+          </p>
+        </div>
+      )}
+
       {/* KPIs Grid - Loading Skeleton */}
-      {isLoading ? (
+      {!isEmpty && isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-24 w-full" />
           ))}
         </div>
-      ) : analysisData ? (
+      ) : !isEmpty && analysisData ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <KPIcard
             title={t("totalOrders")}
@@ -483,7 +476,7 @@ const AnaliseTempoPage = () => {
       ) : null}
 
       {/* Main Graph Card */}
-      <Card className="p-6 lg:p-8">
+      {!isEmpty && <Card className="p-6 lg:p-8">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <div>
             <CardTitle className="text-xl sm:text-2xl font-bold">{t("ordersByHourOfDay")}</CardTitle> {/* Ajustado tamanho da fonte */}
@@ -512,7 +505,7 @@ const AnaliseTempoPage = () => {
             </div>
           ) : null}
         </CardContent>
-      </Card>
+      </Card>}
     </motion.div>
   );
 };
