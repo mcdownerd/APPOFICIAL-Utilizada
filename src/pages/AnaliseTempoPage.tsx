@@ -25,6 +25,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 interface AnalysisData {
   totalOrders: number;
   avgPendingSeconds: number; // Em segundos
+  avgDeletedSeconds: number; // Tempo médio até ser apagado
+  deletedCount: number; // Nº de tickets apagados
   peakHour: string;
   peakCount: number;
   confirmationRate: number; // Em %
@@ -79,6 +81,8 @@ const calculateKPIs = (tickets: Ticket[], t: any): AnalysisData => {
     return {
       totalOrders: 0,
       avgPendingSeconds: 0,
+      avgDeletedSeconds: 0,
+      deletedCount: 0,
       peakHour: "00h",
       peakCount: 0,
       confirmationRate: 0,
@@ -90,6 +94,8 @@ const calculateKPIs = (tickets: Ticket[], t: any): AnalysisData => {
   let totalPendingSeconds = 0;
   let confirmedCount = 0;
   let pendingCount = 0;
+  let totalDeletedSeconds = 0;
+  let deletedCount = 0;
 
   for (let i = 0; i < 24; i++) {
     hourlyCounts[i.toString().padStart(2, '0')] = 0;
@@ -121,6 +127,15 @@ const calculateKPIs = (tickets: Ticket[], t: any): AnalysisData => {
       const secs = differenceInSeconds(endDate, createdDate);
       totalPendingSeconds += Math.max(0, secs);
     }
+
+    // Calcular tempo até ser apagado
+    if (ticket.soft_deleted && ticket.deleted_at) {
+      const deletedSecs = differenceInSeconds(parseISO(ticket.deleted_at), createdDate);
+      if (deletedSecs >= 0) {
+        totalDeletedSeconds += deletedSecs;
+        deletedCount++;
+      }
+    }
   });
 
   const avgPendingSeconds = tickets.length > 0 ? totalPendingSeconds / tickets.length : 0;
@@ -141,9 +156,13 @@ const calculateKPIs = (tickets: Ticket[], t: any): AnalysisData => {
     pedidos,
   }));
 
+  const avgDeletedSeconds = deletedCount > 0 ? totalDeletedSeconds / deletedCount : 0;
+
   return {
     totalOrders: tickets.length,
     avgPendingSeconds: Math.round(avgPendingSeconds),
+    avgDeletedSeconds: Math.round(avgDeletedSeconds),
+    deletedCount,
     peakHour: `${peakHour}h`,
     peakCount,
     confirmationRate: Math.round(confirmationRate),
@@ -437,13 +456,13 @@ const AnaliseTempoPage = () => {
 
       {/* KPIs Grid - Loading Skeleton */}
       {!isEmpty && isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-24 w-full" />
           ))}
         </div>
       ) : !isEmpty && analysisData ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           <KPIcard
             title={t("totalOrders")}
             value={analysisData.totalOrders}
@@ -457,6 +476,15 @@ const AnaliseTempoPage = () => {
             subtitle={analysisData.avgPendingSeconds > 600 ? t("highPendingAlert") : t("goodPending")}
             icon={ClockIcon}
             color={analysisData.avgPendingSeconds > 600 ? "red" : "green"}
+          />
+          <KPIcard
+            title={t("avgTimeUntilDeleted")}
+            value={analysisData.deletedCount > 0 ? formatDuration(analysisData.avgDeletedSeconds) : "—"}
+            subtitle={analysisData.deletedCount > 0
+              ? t("deletedOrdersCount", { count: analysisData.deletedCount })
+              : t("noDeletedOrders")}
+            icon={AlertCircleIcon}
+            color="red"
           />
           <KPIcard
             title={t("peakHour")}

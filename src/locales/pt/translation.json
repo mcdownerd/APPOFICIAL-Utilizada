@@ -155,7 +155,6 @@
   "created": "Criado",
   "confirmed": "Confirmado",
   "restaurantName": "Restaurante",
-  "dashboard": "Painel",
   "activeOrdersOverview": "Visão Geral de Pedidos Ativos",
   "noActiveOrders": "Nenhum pedido ativo encontrado para este período.",
   "activateDashboard": "Ativar Painel",
@@ -182,5 +181,8 @@
   "ecranEstafetaDisabledMessage": "O Ecrã Estafeta está desativado para este restaurante. Por favor, entre em contato com um administrador para ativá-lo.",
   "failedToLoadRestaurantSettings": "Falha ao carregar configurações do restaurante.",
   "noConfirmedTickets": "Nenhum ticket confirmado",
-  "awaitingNewConfirmedCodes": "Aguardando novos códigos confirmados para exibição."
+  "awaitingNewConfirmedCodes": "Aguardando novos códigos confirmados para exibição.",
+  "avgTimeUntilDeleted": "Tempo Médio até Apagar",
+  "deletedOrdersCount": "{{count}} pedido(s) apagado(s)",
+  "noDeletedOrders": "Sem pedidos apagados"
 }
