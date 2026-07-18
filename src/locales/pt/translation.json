@@ -119,6 +119,7 @@
   "activeTicketsDescription_one": "{{count}} ticket ativo.",
   "activeTicketsDescription_other": "{{count}} tickets ativos.",
   "totalOrders": "Total de Pedidos",
+  "thisPeriod": "Neste período ({{period}})",
   "avgPendingTime": "Tempo Médio Pendente",
   "highPendingAlert": "Tempo pendente alto!",
   "goodPending": "Bom tempo pendente.",

@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
-import { TicketAPI, Ticket, UserAPI, RestaurantAPI, Restaurant } from "@/lib/api"; // Import UserAPI e Restaurant
+import { TicketAPI, Ticket, RestaurantAPI, Restaurant } from "@/lib/api";
 import { showError } from "@/utils/toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { CalendarIcon, ChevronDownIcon } from "lucide-react";
+import { CalendarIcon } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Interface para dados agregados
@@ -93,7 +93,6 @@ const calculateKPIs = (tickets: Ticket[], t: any): AnalysisData => {
   const hourlyCounts: Record<string, number> = {};
   let totalPendingSeconds = 0;
   let confirmedCount = 0;
-  let pendingCount = 0;
   let totalDeletedSeconds = 0;
   let deletedCount = 0;
 
@@ -109,24 +108,20 @@ const calculateKPIs = (tickets: Ticket[], t: any): AnalysisData => {
     // Contar status
     if (ticket.status === "CONFIRMADO") {
       confirmedCount++;
-    } else {
-      pendingCount++;
     }
 
     // Calcular tempo pendente para avg
-    let endDate: Date | null = null;
+    let endDate: Date;
     if (ticket.status === "CONFIRMADO" && ticket.acknowledged_at) {
       endDate = parseISO(ticket.acknowledged_at);
     } else if (ticket.soft_deleted && ticket.deleted_at) {
       endDate = parseISO(ticket.deleted_at);
-    } else if (ticket.soft_deleted) {
-      endDate = new Date(); // Até agora
+    } else {
+      endDate = new Date(); // Ainda em aberto (pendente ou sem timestamp) - conta até agora
     }
 
-    if (endDate) {
-      const secs = differenceInSeconds(endDate, createdDate);
-      totalPendingSeconds += Math.max(0, secs);
-    }
+    const secs = differenceInSeconds(endDate, createdDate);
+    totalPendingSeconds += Math.max(0, secs);
 
     // Calcular tempo até ser apagado
     if (ticket.soft_deleted && ticket.deleted_at) {
@@ -151,10 +146,10 @@ const calculateKPIs = (tickets: Ticket[], t: any): AnalysisData => {
     }
   });
 
-  const hourlyData = Object.entries(hourlyCounts).map(([hour, pedidos]) => ({
-    hour: `${hour}h`,
-    pedidos,
-  }));
+  const hourlyData = Array.from({ length: 24 }, (_, i) => {
+    const hour = i.toString().padStart(2, '0');
+    return { hour: `${hour}h`, pedidos: hourlyCounts[hour] };
+  });
 
   const avgDeletedSeconds = deletedCount > 0 ? totalDeletedSeconds / deletedCount : 0;
 
