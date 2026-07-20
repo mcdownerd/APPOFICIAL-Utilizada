@@ -15,11 +15,9 @@ import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { CalendarIcon } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DateRangePicker, DateRange } from "@/components/DateRangePicker";
 
 // Interface para dados agregados
 interface AnalysisData {
@@ -38,42 +36,6 @@ interface HourlyData {
   pedidos: number;
   avgPending?: number; // Opcional para futuro gráfico
 }
-
-// Type for DateRange (from shadcn/ui Calendar) - matching react-day-picker's required properties
-type DateRange = { from: Date | undefined; to: Date | undefined }; // Made from/to optional
-
-// Componente para Date Range Picker simplificado
-const DateRangePicker = ({ dateRange, onChange }: { dateRange: DateRange; onChange: (range: DateRange | undefined) => void }) => {
-  const { t } = useTranslation();
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" className="w-full sm:w-[280px] justify-start text-left font-normal"> {/* Ajustado largura */}
-          <CalendarIcon className="mr-2 h-4 w-4" />
-          {dateRange.from ? (
-            dateRange.to ? (
-              `${format(dateRange.from, "dd/MM/yyyy")} - ${format(dateRange.to, "dd/MM/yyyy")}`
-            ) : (
-              format(dateRange.from, "dd/MM/yyyy")
-            )
-          ) : (
-            <span>{t("pickADate")}</span>
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
-          mode="range"
-          selected={dateRange}
-          onSelect={onChange}
-          numberOfMonths={2}
-          toDate={new Date()}
-          fromDate={subDays(new Date(), 365)} // Máximo 1 ano atrás
-        />
-      </PopoverContent>
-    </Popover>
-  );
-};
 
 // Função para calcular KPIs
 const calculateKPIs = (tickets: Ticket[], t: any): AnalysisData => {
@@ -247,34 +209,34 @@ const AnaliseTempoPage = () => {
   const { data: analysisData, isLoading, error: queryError, refetch } = useQuery<AnalysisData, Error>({
     queryKey: ["analysis", dateRange, selectedRestaurant, user?.restaurant_id, isAdmin, hourRange],
     queryFn: async () => {
+      // Filtro de data agora aplicado direto na query do Supabase (em vez de no cliente),
+      // assim o corte padrão de 1000 linhas do PostgREST vale só para o período pedido.
+      const dateFilter = {
+        from: dateRange.from ? startOfDay(dateRange.from) : undefined,
+        to: dateRange.to ? endOfDay(dateRange.to) : undefined,
+      };
+
       let allTickets: Ticket[] = [];
       if (isAdmin) {
-        // Admin agora puxa TODOS os tickets (ativos e soft-deleted)
-        allTickets = await TicketAPI.filter({ soft_deleted: undefined }, "-created_date");
+        const query: Partial<Ticket> = { soft_deleted: undefined };
+        if (selectedRestaurant !== "all") {
+          query.restaurant_id = selectedRestaurant;
+        }
+        allTickets = await TicketAPI.filter(query, "-created_date", undefined, dateFilter);
       } else if (user?.user_role === "restaurante" && user.restaurant_id) {
-        // Restaurante agora puxa TODOS os tickets (ativos e soft-deleted) associados ao seu restaurant_id
-        allTickets = await TicketAPI.filter({ restaurant_id: user.restaurant_id, soft_deleted: undefined }, "-created_date");
+        allTickets = await TicketAPI.filter(
+          { restaurant_id: user.restaurant_id, soft_deleted: undefined },
+          "-created_date",
+          undefined,
+          dateFilter,
+        );
       }
 
-      // Client-side date filtering
-      const startDate = dateRange.from ? startOfDay(dateRange.from) : null;
-      const endDate = dateRange.to ? endOfDay(dateRange.to) : null;
-
+      // Filtro de hora do dia - precisa ser no cliente, o Supabase não filtra por hora do timestamp
       const filteredTickets = allTickets.filter((ticket) => {
-        const created = parseISO(ticket.created_date);
-        let passesDateFilter = true;
-        if (startDate && created < startDate) passesDateFilter = false;
-        if (endDate && created > endDate) passesDateFilter = false;
-        const hour = created.getHours();
-        if (hour < hourRange.from || hour > hourRange.to) passesDateFilter = false;
-        return passesDateFilter;
+        const hour = parseISO(ticket.created_date).getHours();
+        return hour >= hourRange.from && hour <= hourRange.to;
       });
-
-      // Restaurant filter for admins
-      if (isAdmin && selectedRestaurant !== "all") {
-        const filteredByRestaurant = filteredTickets.filter((ticket) => ticket.restaurant_id === selectedRestaurant);
-        return calculateKPIs(filteredByRestaurant, t);
-      }
 
       return calculateKPIs(filteredTickets, t);
     },

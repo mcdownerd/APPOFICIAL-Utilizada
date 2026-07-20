@@ -252,11 +252,12 @@ export const TicketAPI = {
     query: Partial<Ticket>,
     order: string = "created_date",
     limit?: number,
+    dateRange?: { from?: Date; to?: Date; field?: 'created_date' | 'deleted_at' },
   ): Promise<Ticket[]> => {
     let supabaseQuery = supabase
       .from('tickets')
       .select('*');
-    
+
     for (const [key, value] of Object.entries(query)) {
       let dbKey = key;
       if (key === 'acknowledged_by_user_id') dbKey = 'acknowledged_by';
@@ -271,16 +272,39 @@ export const TicketAPI = {
       }
     }
 
+    const dateField = dateRange?.field || 'created_date';
+    if (dateRange?.from) {
+      supabaseQuery = supabaseQuery.gte(dateField, dateRange.from.toISOString());
+    }
+    if (dateRange?.to) {
+      supabaseQuery = supabaseQuery.lte(dateField, dateRange.to.toISOString());
+    }
+
     const orderField = order.startsWith('-') ? order.substring(1) : order;
     const orderDir = order.startsWith('-') ? 'desc' : 'asc';
     supabaseQuery = supabaseQuery.order(orderField, { ascending: orderDir === 'asc' });
 
-    if (limit) supabaseQuery = supabaseQuery.limit(limit);
+    // O PostgREST limita a 1000 linhas por padrão quando não há .limit()/.range().
+    // Sem um limit explícito, pagina em blocos de 1000 até trazer tudo do intervalo pedido.
+    let rows = [];
+    if (limit) {
+      const { data, error } = await supabaseQuery.limit(limit);
+      if (error) throw error;
+      rows = data;
+    } else {
+      const PAGE_SIZE = 1000;
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabaseQuery.range(from, from + PAGE_SIZE - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        rows = rows.concat(data);
+        if (data.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
+      }
+    }
 
-    const { data, error } = await supabaseQuery;
-    if (error) throw error;
-
-    return data.map(ticket => ({
+    return rows.map(ticket => ({
       id: ticket.id,
       code: ticket.code,
       status: ticket.status === "ACKED" ? "CONFIRMADO" : ticket.status,

@@ -18,11 +18,12 @@ import {
 } from "@/components/ui/table";
 import { HistoryIcon, RefreshCwIcon, Undo2Icon, CheckCircleIcon, ClockIcon, CalendarIcon, ArrowUpDown, SearchIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { format, parseISO, differenceInMinutes } from "date-fns";
+import { format, parseISO, differenceInMinutes, startOfDay, endOfDay, startOfWeek, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DateRangePicker, DateRange } from "@/components/DateRangePicker";
 
 interface SortConfig {
   key: 'code' | 'status' | 'created_by_user_email' | 'deleted_at' | 'pendingTime' | 'restaurantName';
@@ -80,6 +81,34 @@ const HistoricoPage = () => {
   const [availableRestaurants, setAvailableRestaurants] = useState<Restaurant[]>([]);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'deleted_at', direction: 'desc' });
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedPeriod, setSelectedPeriod] = useState("month"); // today, week, month, all, custom
+  const [dateRange, setDateRange] = useState<DateRange>({ from: startOfMonth(new Date()), to: new Date() });
+
+  // Recalcula o intervalo de datas quando o período rápido muda
+  useEffect(() => {
+    const today = new Date();
+    switch (selectedPeriod) {
+      case "today":
+        setDateRange({ from: startOfDay(today), to: endOfDay(today) });
+        break;
+      case "week":
+        setDateRange({ from: startOfWeek(today, { weekStartsOn: 0 }), to: endOfDay(today) });
+        break;
+      case "month":
+        setDateRange({ from: startOfMonth(today), to: endOfDay(today) });
+        break;
+      case "all":
+        setDateRange({ from: undefined, to: undefined });
+        break;
+      case "custom":
+        // Mantém o intervalo escolhido no calendário
+        break;
+    }
+  }, [selectedPeriod]);
+
+  const handleDateRangeChange = (range: DateRange | undefined) => {
+    setDateRange(range || { from: undefined, to: undefined });
+  };
 
   useEffect(() => {
     const fetchRestaurants = async () => {
@@ -107,15 +136,20 @@ const HistoricoPage = () => {
     try {
       let tickets: Ticket[];
       const filter: Partial<Ticket> = { soft_deleted: true };
+      const dateFilter = {
+        from: dateRange.from ? startOfDay(dateRange.from) : undefined,
+        to: dateRange.to ? endOfDay(dateRange.to) : undefined,
+        field: 'deleted_at' as const,
+      };
 
       if (isAdmin) {
         if (selectedRestaurant !== "all") {
           filter.restaurant_id = selectedRestaurant;
         }
-        tickets = await TicketAPI.filter(filter, "-deleted_at");
+        tickets = await TicketAPI.filter(filter, "-deleted_at", undefined, dateFilter);
       } else if (user?.user_role === "restaurante" && user.restaurant_id) {
         filter.restaurant_id = user.restaurant_id;
-        tickets = await TicketAPI.filter(filter, "-deleted_at");
+        tickets = await TicketAPI.filter(filter, "-deleted_at", undefined, dateFilter);
       } else {
         tickets = [];
       }
@@ -174,7 +208,7 @@ const HistoricoPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, isAdmin, t, sortConfig, getRestaurantNameForTicket, selectedRestaurant]);
+  }, [user, isAdmin, t, sortConfig, getRestaurantNameForTicket, selectedRestaurant, dateRange]);
 
   useEffect(() => {
     fetchDeletedTickets();
@@ -238,6 +272,26 @@ const HistoricoPage = () => {
           </Button>
         </div>
       </div>
+
+      {/* Filtro de Período */}
+      <Card className="p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-muted-foreground mr-1">{t("selectPeriod")}:</span>
+          {(["today", "week", "month", "all", "custom"] as const).map((period) => (
+            <Button
+              key={period}
+              size="sm"
+              variant={selectedPeriod === period ? "default" : "outline"}
+              onClick={() => setSelectedPeriod(period)}
+            >
+              {t(period)}
+            </Button>
+          ))}
+          {selectedPeriod === "custom" && (
+            <DateRangePicker dateRange={dateRange} onChange={handleDateRangeChange} />
+          )}
+        </div>
+      </Card>
 
       {/* Barra de Pesquisa */}
       <div className="relative">
