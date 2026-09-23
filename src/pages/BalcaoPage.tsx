@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, RefreshCcwIcon, ClockIcon, CheckCircleIcon, Trash2Icon, UtensilsCrossedIcon } from 'lucide-react';
-import { TicketAPI, Ticket, UserAPI, RestaurantAPI, Restaurant } from '@/lib/api';
+import { TicketAPI, Ticket, UserAPI, RestaurantAPI, Restaurant, applyTicketRealtimeEvent } from '@/lib/api';
+import type { TicketRow } from '@/lib/api';
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { showSuccess, showError, showInfo } from '@/utils/toast';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -15,6 +17,9 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+
+// Teto de segurança da busca inicial; as atualizações contínuas são por realtime.
+const ACTIVE_TICKETS_LIMIT = 200;
 
 export default function BalcaoPage() {
   const { user, isAdmin, isRestaurante } = useAuth();
@@ -46,6 +51,10 @@ export default function BalcaoPage() {
     fetchRestaurants();
   }, [isAdmin, t]);
 
+  const restaurantFilter = isAdmin
+    ? (selectedRestaurant !== "all" ? selectedRestaurant : null)
+    : (user?.user_role === "restaurante" ? user.restaurant_id ?? null : null);
+
   const loadTickets = useCallback(async () => {
     if (!user || (!isAdmin && user.user_role === "restaurante" && !user.restaurant_id)) {
       setLoading(false);
@@ -61,14 +70,16 @@ export default function BalcaoPage() {
         if (selectedRestaurant !== "all") {
           filter.restaurant_id = selectedRestaurant;
         }
-        fetchedTickets = await TicketAPI.filter(filter, "created_date");
+        fetchedTickets = await TicketAPI.filter(filter, "-created_date", ACTIVE_TICKETS_LIMIT);
       } else if (user.user_role === "restaurante" && user.restaurant_id) {
         filter.restaurant_id = user.restaurant_id;
-        fetchedTickets = await TicketAPI.filter(filter, "created_date");
+        fetchedTickets = await TicketAPI.filter(filter, "-created_date", ACTIVE_TICKETS_LIMIT);
       } else {
         fetchedTickets = [];
       }
-      setTickets(fetchedTickets);
+      // Busca decrescente limitada (o limite precisa pegar os mais novos para
+      // não esconder pendentes novos); a exibição permanece crescente.
+      setTickets(fetchedTickets.reverse());
     } catch (error) {
       console.error('Error loading tickets:', error);
       showError(t('failedToLoadActiveTickets'));
@@ -78,7 +89,7 @@ export default function BalcaoPage() {
     }
   }, [user, isAdmin, t, selectedRestaurant]);
 
-  // Ref para sempre ter acesso à versão mais recente de loadTickets sem recriar o canal
+  // Ref para sempre ter acesso à versão mais recente de loadTickets
   const loadTicketsRef = useRef(loadTickets);
   useEffect(() => {
     loadTicketsRef.current = loadTickets;
@@ -89,24 +100,28 @@ export default function BalcaoPage() {
     loadTickets();
   }, [loadTickets]);
 
-  // Subscrição Realtime — criada apenas uma vez, nunca recriada
+  // Subscrição Realtime: filtrada por restaurante (eventos de outros restaurantes
+  // nem chegam) e com atualização incremental — cada evento aplica só o ticket
+  // alterado, sem baixar a lista de novo.
   useEffect(() => {
     const channel = supabase
-      .channel('balcao-tickets-changes')
+      .channel(`balcao-tickets-changes-${restaurantFilter ?? "all"}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: 'tickets'
+          table: 'tickets',
+          ...(restaurantFilter ? { filter: `restaurant_id=eq.${restaurantFilter}` } : {}),
         },
-        (payload) => {
-          console.log('[Balcao Realtime] Change received:', payload);
-          loadTicketsRef.current();
+        (payload: RealtimePostgresChangesPayload<TicketRow>) => {
+          setTickets(prev => applyTicketRealtimeEvent(prev, payload.eventType, payload.new as TicketRow, payload.old as TicketRow, restaurantFilter));
         }
       )
       .subscribe((status) => {
         console.log('[Balcao Realtime] Status:', status);
+        // Re-sincroniza a lista ao (re)conectar, cobrindo eventos perdidos offline.
+        if (status === 'SUBSCRIBED') loadTicketsRef.current();
       });
 
     return () => {
@@ -116,7 +131,7 @@ export default function BalcaoPage() {
         doubleClickTimeoutRef.current = null;
       }
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [restaurantFilter]);
 
   const handleTicketClick = async (ticket: Ticket) => {
     if (!user) {

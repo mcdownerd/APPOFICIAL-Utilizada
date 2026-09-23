@@ -31,9 +31,13 @@ const EstafetaPage = () => {
   const fetchRecentTickets = useCallback(async () => {
     if (!user) return;
     try {
+      // Janela de 24h + limite: buscar o histórico completo do estafeta fazia o
+      // download crescer indefinidamente a cada carregamento e evento realtime.
       const allUserTickets = await TicketAPI.filter(
-        { created_by_user_id: user.id, soft_deleted: undefined },
+        { created_by_user_id: user.id },
         "-created_date",
+        50,
+        { from: new Date(Date.now() - 24 * 60 * 60 * 1000) },
       );
 
       const ticketsToDisplay: Ticket[] = [];

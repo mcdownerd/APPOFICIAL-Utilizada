@@ -35,6 +35,66 @@ export interface Ticket {
   restaurant_id?: string;
 }
 
+// Linha crua da tabela tickets (formato PostgREST e payload de realtime)
+export interface TicketRow {
+  id: string;
+  code: string;
+  status: string;
+  created_by_ip: string;
+  acknowledged_at: string | null;
+  acknowledged_by: string | null;
+  acknowledged_by_email: string | null;
+  soft_deleted: boolean;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  deleted_by_email: string | null;
+  created_date: string;
+  created_by: string;
+  created_by_email: string | null;
+  restaurant_id: string | null;
+}
+
+export const mapTicketRow = (row: TicketRow): Ticket => ({
+  id: row.id,
+  code: row.code,
+  status: (row.status === "ACKED" ? "CONFIRMADO" : row.status) as TicketStatus,
+  created_by_ip: row.created_by_ip,
+  acknowledged_at: row.acknowledged_at || null,
+  acknowledged_by_user_id: row.acknowledged_by || null,
+  acknowledged_by_user_email: row.acknowledged_by_email || null,
+  soft_deleted: row.soft_deleted,
+  deleted_at: row.deleted_at || null,
+  deleted_by_user_id: row.deleted_by || null,
+  deleted_by_user_email: row.deleted_by_email || null,
+  created_date: row.created_date,
+  created_by_user_id: row.created_by || '',
+  created_by_user_email: row.created_by_email || '',
+  restaurant_id: row.restaurant_id ?? undefined,
+});
+
+// Aplica um evento de realtime (postgres_changes) sobre a lista em memória de
+// tickets ativos: insere/atualiza/remove e mantém a ordem crescente por data.
+// Evita refazer o download da lista inteira a cada evento.
+export const applyTicketRealtimeEvent = (
+  prev: Ticket[],
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE',
+  newRow: TicketRow,
+  oldRow?: TicketRow | null,
+  restaurantId?: string | null,
+): Ticket[] => {
+  if (eventType === 'DELETE') {
+    return prev.filter(t => t.id !== oldRow?.id);
+  }
+  const ticket = mapTicketRow(newRow);
+  const matchesRestaurant = !restaurantId || ticket.restaurant_id === restaurantId;
+  const next = prev.filter(t => t.id !== ticket.id);
+  if (!ticket.soft_deleted && matchesRestaurant) {
+    next.push(ticket);
+    next.sort((a, b) => a.created_date.localeCompare(b.created_date));
+  }
+  return next;
+};
+
 export interface Restaurant {
   id: string;
   name: string;
@@ -304,23 +364,7 @@ export const TicketAPI = {
       }
     }
 
-    return rows.map(ticket => ({
-      id: ticket.id,
-      code: ticket.code,
-      status: ticket.status === "ACKED" ? "CONFIRMADO" : ticket.status,
-      created_by_ip: ticket.created_by_ip,
-      acknowledged_at: ticket.acknowledged_at || null,
-      acknowledged_by_user_id: ticket.acknowledged_by || null,
-      acknowledged_by_user_email: ticket.acknowledged_by_email || null,
-      soft_deleted: ticket.soft_deleted,
-      deleted_at: ticket.deleted_at || null,
-      deleted_by_user_id: ticket.deleted_by || null,
-      deleted_by_user_email: ticket.deleted_by_email || null,
-      created_date: ticket.created_date,
-      created_by_user_id: ticket.created_by || '', // Corrigido aqui
-      created_by_user_email: ticket.created_by_email || '', // Corrigido aqui
-      restaurant_id: ticket.restaurant_id,
-    }));
+    return rows.map(mapTicketRow);
   },
 
   list: async (order: string = "created_date", limit?: number): Promise<Ticket[]> => {

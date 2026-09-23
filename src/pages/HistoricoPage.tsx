@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
 import { TicketAPI, Ticket, UserAPI, RestaurantAPI, Restaurant } from "@/lib/api";
@@ -74,7 +74,7 @@ const formatDateWithWeekday = (dateString: string, locale: any) => {
 const HistoricoPage = () => {
   const { user, isAdmin } = useAuth();
   const { t, i18n } = useTranslation();
-  const [deletedTickets, setDeletedTickets] = useState<TicketWithPendingTime[]>([]);
+  const [deletedTickets, setDeletedTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selectedRestaurant, setSelectedRestaurant] = useState("all");
@@ -134,7 +134,7 @@ const HistoricoPage = () => {
   const fetchDeletedTickets = useCallback(async () => {
     setLoading(true);
     try {
-      let tickets: Ticket[];
+      let tickets: Ticket[] = [];
       const filter: Partial<Ticket> = { soft_deleted: true };
       const dateFilter = {
         from: dateRange.from ? startOfDay(dateRange.from) : undefined,
@@ -150,69 +150,73 @@ const HistoricoPage = () => {
       } else if (user?.user_role === "restaurante" && user.restaurant_id) {
         filter.restaurant_id = user.restaurant_id;
         tickets = await TicketAPI.filter(filter, "-deleted_at", undefined, dateFilter);
-      } else {
-        tickets = [];
       }
 
-      const ticketsWithPendingTime: TicketWithPendingTime[] = tickets.map(ticket => ({
-        ...ticket,
-        pendingTimeValue: getPendingDuration(ticket, t).value,
-        restaurantNameDisplay: getRestaurantNameForTicket(ticket.restaurant_id),
-      }));
-
-      if (sortConfig) {
-        ticketsWithPendingTime.sort((a, b) => {
-          let aValue: any;
-          let bValue: any;
-
-          switch (sortConfig.key) {
-            case 'pendingTime':
-              aValue = a.pendingTimeValue;
-              bValue = b.pendingTimeValue;
-              break;
-            case 'deleted_at':
-              aValue = a.deleted_at ? parseISO(a.deleted_at).getTime() : 0;
-              bValue = b.deleted_at ? parseISO(b.deleted_at).getTime() : 0;
-              break;
-            case 'created_by_user_email':
-              aValue = a.created_by_user_email || '';
-              bValue = b.created_by_user_email || '';
-              break;
-            case 'status':
-              aValue = a.status;
-              bValue = b.status;
-              break;
-            case 'code':
-              aValue = a.code;
-              bValue = b.code;
-              break;
-            case 'restaurantName':
-              aValue = a.restaurantNameDisplay;
-              bValue = b.restaurantNameDisplay;
-              break;
-            default:
-              aValue = 0;
-              bValue = 0;
-          }
-
-          if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-          if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
-          return 0;
-        });
-      }
-
-      setDeletedTickets(ticketsWithPendingTime);
+      setDeletedTickets(tickets);
     } catch (error) {
       console.error("Failed to fetch deleted tickets:", error);
       showError(t("failedToLoadHistory"));
     } finally {
       setLoading(false);
     }
-  }, [user, isAdmin, t, sortConfig, getRestaurantNameForTicket, selectedRestaurant, dateRange]);
+    // Dependências primitivas (em vez do objeto user): o AuthContext recria o
+    // objeto user a cada evento de auth, e isso não deve disparar nova busca.
+  }, [isAdmin, selectedRestaurant, dateRange, t, user?.user_role, user?.restaurant_id]);
 
   useEffect(() => {
     fetchDeletedTickets();
   }, [fetchDeletedTickets]);
+
+  // A ordenação é feita em memória sobre os tickets já baixados: clicar para
+  // ordenar não deve gerar nova query ao Supabase.
+  const processedTickets = useMemo<TicketWithPendingTime[]>(() => {
+    const withPendingTime = deletedTickets.map(ticket => ({
+      ...ticket,
+      pendingTimeValue: getPendingDuration(ticket, t).value,
+      restaurantNameDisplay: getRestaurantNameForTicket(ticket.restaurant_id),
+    }));
+
+    if (!sortConfig) return withPendingTime;
+
+    return withPendingTime.sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      switch (sortConfig.key) {
+        case 'pendingTime':
+          aValue = a.pendingTimeValue;
+          bValue = b.pendingTimeValue;
+          break;
+        case 'deleted_at':
+          aValue = a.deleted_at ? parseISO(a.deleted_at).getTime() : 0;
+          bValue = b.deleted_at ? parseISO(b.deleted_at).getTime() : 0;
+          break;
+        case 'created_by_user_email':
+          aValue = a.created_by_user_email || '';
+          bValue = b.created_by_user_email || '';
+          break;
+        case 'status':
+          aValue = a.status;
+          bValue = b.status;
+          break;
+        case 'code':
+          aValue = a.code;
+          bValue = b.code;
+          break;
+        case 'restaurantName':
+          aValue = a.restaurantNameDisplay;
+          bValue = b.restaurantNameDisplay;
+          break;
+        default:
+          aValue = 0;
+          bValue = 0;
+      }
+
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [deletedTickets, t, getRestaurantNameForTicket, sortConfig]);
 
   const handleRestoreTicket = async (ticketId: string) => {
     if (!user) {
@@ -313,7 +317,7 @@ const HistoricoPage = () => {
             <div className="flex items-center justify-center p-8">
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-500 border-t-transparent"></div>
             </div>
-          ) : deletedTickets.length === 0 ? (
+          ) : processedTickets.length === 0 ? (
             <p className="text-center text-gray-500">{t("noRemovedTickets")}</p>
           ) : (
             <div className="overflow-x-auto">
@@ -360,7 +364,7 @@ const HistoricoPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {deletedTickets
+                  {processedTickets
                     .filter(ticket => {
                       if (!searchQuery.trim()) return true;
                       const q = searchQuery.toLowerCase();
