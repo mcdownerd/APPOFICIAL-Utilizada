@@ -9,7 +9,7 @@ import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { showError, showSuccess, showInfo } from '@/utils/toast'; // Import showInfo
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, RefreshCcwIcon, UtensilsCrossedIcon, MonitorIcon, CheckCircleIcon, ClockIcon } from 'lucide-react';
+import { Loader2, RefreshCcwIcon, UtensilsCrossedIcon, MonitorIcon, CheckCircleIcon, ClockIcon, InfoIcon } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useTranslation } from "react-i18next";
@@ -20,6 +20,8 @@ import { supabase } from '@/integrations/supabase/client';
 
 // Teto de segurança da busca inicial; as atualizações contínuas são por realtime.
 const ACTIVE_TICKETS_LIMIT = 200;
+// A instrução de descer vale apenas para a instalação da Amadora.
+const BANNER_RESTAURANT_ID = "R-Amadora";
 
 export default function EcranEstafetaPage() {
   const { user, isAdmin, isRestaurante } = useAuth();
@@ -336,6 +338,18 @@ export default function EcranEstafetaPage() {
           </Button>
         </div>
       </div>
+
+      {/* Instrução permanente para os estafetas — apenas no restaurante da Amadora */}
+      {restaurantFilter === BANNER_RESTAURANT_ID && (
+        <div className="flex items-center justify-center gap-3 rounded-xl border border-green-200 bg-gradient-to-r from-green-100 to-green-50 px-4 py-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white shadow-sm">
+            <CheckCircleIcon className="h-6 w-6 text-green-600" />
+          </div>
+          <p className="text-center text-base sm:text-lg font-semibold uppercase tracking-wide text-gray-800">
+            {t("onlyGoDownWhenNumberOnScreen")}
+          </p>
+        </div>
+      )}
 
       {tickets.length === 0 ? (
         <motion.div

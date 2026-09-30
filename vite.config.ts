@@ -15,7 +15,9 @@ export default defineConfig(() => ({
     VitePWA({ // PWA Configuration
       registerType: 'autoUpdate',
       devOptions: {
-        enabled: true // Enable PWA in development for testing
+        // Desativado: o SW de dev guardava versões antigas no cache e travava
+        // o hot reload durante os testes locais.
+        enabled: false
       },
       manifest: {
         name: 'DeliveryFlow',
