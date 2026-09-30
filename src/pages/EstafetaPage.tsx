@@ -28,6 +28,26 @@ const EstafetaPage = () => {
     console.log("EstafetaPage: User restaurant_id:", user?.restaurant_id);
   }, [user?.restaurant_id]);
 
+  // Modo teclado (tablet): mantém o campo de código sempre focado — foca ao
+  // carregar/quando o utilizador fica disponível e depois de cada envio.
+  const codeInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!isSubmitting && user?.restaurant_id) {
+      codeInputRef.current?.focus();
+    }
+  }, [isSubmitting, user?.restaurant_id]);
+
+  const handleCodeBlur = () => {
+    // Devolve o foco ao campo se o toque foi para fora de outro controle
+    // (ex.: espaço vazio da página), sem roubar foco de botões e seletores.
+    setTimeout(() => {
+      const el = codeInputRef.current;
+      if (el && (document.activeElement === null || document.activeElement === document.body)) {
+        el.focus();
+      }
+    }, 80);
+  };
+
   const fetchRecentTickets = useCallback(async () => {
     if (!user) return;
     try {
@@ -225,11 +245,13 @@ const EstafetaPage = () => {
           <CardContent>
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <Input
+                ref={codeInputRef}
                 type="text"
                 placeholder="XXXX"
                 maxLength={4}
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4))}
+                onBlur={handleCodeBlur}
                 className="text-xl sm:text-2xl text-center font-mono tracking-widest border-estafeta focus:ring-estafeta-dark focus:border-estafeta-dark"
                 disabled={isSubmitting || !user?.restaurant_id}
               />
