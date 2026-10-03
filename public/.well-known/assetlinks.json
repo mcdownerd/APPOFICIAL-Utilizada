@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.mcdownerd.deliveryflow",
+      "sha256_cert_fingerprints": [
+        "18:EE:67:67:38:DA:EA:D2:2B:FD:16:4F:E9:25:DF:EE:6F:D3:6F:DA:0D:1E:FB:5A:2D:F6:71:45:B6:B0:5A:4B"
+      ]
+    }
+  }
+]
