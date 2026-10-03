@@ -8,7 +8,6 @@ import type { TicketRow } from '@/lib/api';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { showError, showSuccess, showInfo } from '@/utils/toast'; // Import showInfo
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Loader2, RefreshCcwIcon, UtensilsCrossedIcon, MonitorIcon, CheckCircleIcon, ClockIcon, InfoIcon } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -368,11 +367,10 @@ export default function EcranEstafetaPage() {
           </Card>
         </motion.div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-3">
           <AnimatePresence>
             {tickets.map((ticket, index) => {
               const status = getTicketStatus(ticket);
-              const StatusIcon = status.icon;
               const isProcessing = processingTickets.has(ticket.id);
               const isPendingDelete = pendingDelete === ticket.id;
 
@@ -383,7 +381,7 @@ export default function EcranEstafetaPage() {
                   initial={{ opacity: 0, scale: 0.9, y: 20 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.8, y: -20 }}
-                  transition={{ duration: 0.3, delay: index * 0.05 }}
+                  transition={{ duration: 0.3, delay: Math.min(index * 0.05, 0.5) }}
                   className="group"
                 >
                   <Card
@@ -401,23 +399,10 @@ export default function EcranEstafetaPage() {
                         <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
                       </div>
                     )}
-                    <CardContent className="p-4 space-y-3 flex-1 flex flex-col justify-between">
-                      <div className="text-center">
-                        <p className="text-4xl font-mono font-extrabold tracking-wider text-gray-900">
-                          {ticket.code}
-                        </p>
-                      </div>
-
-                      <div className="flex justify-center">
-                        <Badge className={cn("px-3 py-1 text-sm font-semibold", status.className)}>
-                          <StatusIcon className="h-4 w-4 mr-2" />
-                          {status.label}
-                        </Badge>
-                      </div>
-
-                      {/* Removido: status.clickable e status.clickText */}
-
-                      {/* Removido: Detalhes de data/hora */}
+                    <CardContent className="p-2 flex flex-1 items-center justify-center">
+                      <p className="text-3xl xl:text-4xl font-mono font-extrabold tracking-wider text-gray-900">
+                        {ticket.code}
+                      </p>
                     </CardContent>
                   </Card>
                 </motion.div>
