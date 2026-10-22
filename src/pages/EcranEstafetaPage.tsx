@@ -19,8 +19,11 @@ import { supabase } from '@/integrations/supabase/client';
 
 // Teto de segurança da busca inicial; as atualizações contínuas são por realtime.
 const ACTIVE_TICKETS_LIMIT = 200;
-// A instrução de descer vale apenas para a instalação da Amadora.
-const BANNER_RESTAURANT_ID = "R-Amadora";
+// Instrução por restaurante: cada instalação tem a sua frase no ecrã.
+const BANNER_BY_RESTAURANT_ID: Record<string, string> = {
+  'R-Amadora': 'onlyGoDownWhenNumberOnScreen',
+  'Queluz': 'approachBenchWhenGreen',
+};
 
 export default function EcranEstafetaPage() {
   const { user, isAdmin, isRestaurante } = useAuth();
@@ -83,6 +86,8 @@ export default function EcranEstafetaPage() {
   const restaurantFilter = isAdmin
     ? (selectedRestaurant !== "all" ? selectedRestaurant : null)
     : (user?.user_role === "restaurante" ? user.restaurant_id ?? null : null);
+
+  const bannerKey = restaurantFilter ? BANNER_BY_RESTAURANT_ID[restaurantFilter] : undefined;
 
   const loadTickets = useCallback(async () => {
     if (!user || (!isAdmin && user.user_role === "restaurante" && !user.restaurant_id)) {
@@ -338,14 +343,14 @@ export default function EcranEstafetaPage() {
         </div>
       </div>
 
-      {/* Instrução permanente para os estafetas — apenas no restaurante da Amadora */}
-      {restaurantFilter === BANNER_RESTAURANT_ID && (
+      {/* Instrução permanente por restaurante (ver BANNER_BY_RESTAURANT_ID) */}
+      {bannerKey && (
         <div className="flex items-center justify-center gap-3 rounded-xl border border-green-200 bg-gradient-to-r from-green-100 to-green-50 px-4 py-3">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white shadow-sm">
             <CheckCircleIcon className="h-6 w-6 text-green-600" />
           </div>
           <p className="text-center text-base sm:text-lg font-semibold uppercase tracking-wide text-gray-800">
-            {t("onlyGoDownWhenNumberOnScreen")}
+            {t(bannerKey)}
           </p>
         </div>
       )}
