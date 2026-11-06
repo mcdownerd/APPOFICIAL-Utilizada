@@ -22,7 +22,7 @@ const ACTIVE_TICKETS_LIMIT = 200;
 // Instrução por restaurante: cada instalação tem a sua frase no ecrã.
 const BANNER_BY_RESTAURANT_ID: Record<string, string> = {
   'R-Amadora': 'onlyGoDownWhenNumberOnScreen',
-  'Queluz': 'approachBenchWhenGreen',
+  'Queluz': 'queluzBanner',
 };
 
 export default function EcranEstafetaPage() {
